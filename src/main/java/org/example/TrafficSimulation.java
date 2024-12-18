@@ -2,6 +2,9 @@ package org.example;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.util.ArrayList;
 import java.util.Objects;
 
 public class TrafficSimulation extends JPanel {
@@ -10,12 +13,98 @@ public class TrafficSimulation extends JPanel {
     private final int HEIGHT = 780;
     private final Color GRAY = new Color(169, 169, 169);
     private final Color WHITE = Color.WHITE;
-    private final Color GREEN = new Color(34, 139, 34); // Grass color
+    private final Color GREEN = new Color(34, 139, 34);
+    private java.util.List<Segment> path = new ArrayList<>();
+    private double currentPosition = 0;
+    private double totalPathLength;
+    private Timer timer;
 
     public TrafficSimulation() {
         this.setPreferredSize(new Dimension(WIDTH, HEIGHT));
         this.setBackground(GREEN);
 
+//      Trasa 1 - pólnoc - wschód
+//        path.add(new LineSegment(new Point(WIDTH/2-40, 0), new Point(WIDTH/2-40, HEIGHT/2)));
+//        path.add(new ArcSegment(new Point(WIDTH/2-40, HEIGHT/2-70),new Point(WIDTH/2+45, HEIGHT/2+70),180,270));
+//        path.add(new LineSegment(new Point(WIDTH/2, HEIGHT/2+70), new Point(WIDTH, HEIGHT/2+70)));
+//        calculateTotalPathLength();
+
+
+//        Trasa 2 - pólnoc - południe
+//        path.add(new LineSegment(new Point(WIDTH/2-40, 0), new Point(WIDTH/2-40, HEIGHT)));
+//        calculateTotalPathLength();
+
+//        Trasa 3 - pólnoc - zachód
+//        path.add(new LineSegment(new Point(WIDTH/2-40, 0), new Point(WIDTH/2-40, HEIGHT/2-100)));
+//        path.add(new ArcSegment(new Point(WIDTH/2-40, HEIGHT/2-130),new Point(WIDTH/2-120, HEIGHT/2-68),0,-90));
+//        path.add(new LineSegment(new Point(WIDTH/2-80, HEIGHT/2-68),new Point(0, HEIGHT/2-68)));
+//        calculateTotalPathLength();
+
+        //Trasa 4 - wschód - północ
+//        path.add(new LineSegment(new Point(WIDTH, HEIGHT/2-68),new Point(WIDTH/2+60, HEIGHT/2-68)));
+//        path.add(new ArcSegment(new Point(WIDTH/2+80, HEIGHT/2-68),new Point(WIDTH/2+40, HEIGHT/2-100),-90,-180));
+//        path.add(new LineSegment(new Point(WIDTH/2+40, HEIGHT/2-85), new Point(WIDTH/2+40, 0)));
+//        calculateTotalPathLength();
+
+        //Trasa 5 - wschód - zachód
+//        path.add(new LineSegment(new Point(WIDTH, HEIGHT/2-68),new Point(0, HEIGHT/2-68)));
+//        calculateTotalPathLength();
+
+        //Trasa 6 wchód - południe
+//        path.add(new LineSegment(new Point(WIDTH, HEIGHT/2),new Point(WIDTH/2, HEIGHT/2)));
+//        path.add(new ArcSegment(new Point(WIDTH/2+40, HEIGHT/2),new Point(WIDTH/2-40, HEIGHT/2+200),90,180));
+//        path.add(new LineSegment(new Point(WIDTH/2-40, HEIGHT/2+100),new Point(WIDTH/2-40, HEIGHT)));
+//        calculateTotalPathLength();
+
+        //Trasa 7 południe - wschód
+//        path.add(new LineSegment(new Point(WIDTH/2+40, HEIGHT),new Point(WIDTH/2+40, HEIGHT/2+100)));
+//        path.add(new ArcSegment(new Point(WIDTH/2+40, HEIGHT/2+130),new Point(WIDTH/2+120, HEIGHT/2+68),180,90));
+//        path.add(new LineSegment(new Point(WIDTH/2+80, HEIGHT/2+68),new Point(WIDTH, HEIGHT/2+68)));
+//        calculateTotalPathLength();
+
+        //Trasa 8 południe - północ
+//        path.add(new LineSegment(new Point(WIDTH/2+40, HEIGHT),new Point(WIDTH/2+40, 0)));
+//        calculateTotalPathLength();
+
+        //Trasa 9 południe - zachód
+//        path.add(new LineSegment(new Point(WIDTH/2+40, HEIGHT),new Point(WIDTH/2+40, HEIGHT/2-34)));
+//        path.add(new ArcSegment(new Point(WIDTH/2+40, HEIGHT/2),new Point(WIDTH/2-200, HEIGHT/2-68),0,90));
+//        path.add(new LineSegment(new Point(WIDTH/2-80, HEIGHT/2-68),new Point(0, HEIGHT/2-68)));
+//        calculateTotalPathLength();
+
+        //Trasa 10 zachód - południe
+//        path.add(new LineSegment(new Point(0, HEIGHT/2+68),new Point(WIDTH/2-80, HEIGHT/2+68)));
+//        path.add(new ArcSegment(new Point(WIDTH/2-120, HEIGHT/2+68),new Point(WIDTH/2-40, HEIGHT/2+130),90,0));
+//        path.add(new LineSegment(new Point(WIDTH/2-40, HEIGHT/2+100),new Point(WIDTH/2-40, HEIGHT)));
+//        calculateTotalPathLength();
+
+        //Trasa 11 zachód - wschód
+//        path.add(new LineSegment(new Point(0, HEIGHT/2+68),new Point(WIDTH, HEIGHT/2+68)));
+//        calculateTotalPathLength();
+
+        //Trasa 12 zachód - południe
+//        path.add(new LineSegment(new Point(0, HEIGHT/2),new Point(WIDTH/2, HEIGHT/2)));
+//        path.add(new ArcSegment(new Point(WIDTH/2-40, HEIGHT/2),new Point(WIDTH/2+40, HEIGHT/2-200),270,360));
+//        path.add(new LineSegment(new Point(WIDTH/2+40, HEIGHT/2-100),new Point(WIDTH/2+40, 0)));
+//        calculateTotalPathLength();
+
+
+        timer = new Timer(50, e -> {
+            currentPosition += 5; // Prędkość samochodu
+            if (currentPosition > totalPathLength) { // Poprawione sprawdzenie końca trasy
+                currentPosition = 0; // Zresetuj pozycję na początek
+            }
+            repaint();
+        });
+        timer.start();
+
+    }
+
+    private void calculateTotalPathLength() {
+        totalPathLength = 0;
+        for (Segment segment : path) {
+            totalPathLength += segment.getLength();
+        }
     }
 
     public static void main(String[] args) {
@@ -43,7 +132,25 @@ public class TrafficSimulation extends JPanel {
         g.setColor(GRAY);
         g.fillRect(WIDTH / 2 - 80, HEIGHT / 2 - 100, 160, 201);
 
+        for (Segment segment : path) {
+            segment.draw(g);
+        }
 
+        Point carPosition = getCarPosition();
+        g.setColor(Color.RED);
+        g.fillOval(carPosition.x - 5, carPosition.y - 5, 10, 10);
+
+    }
+
+    private Point getCarPosition() {
+        double distanceTraveled = currentPosition;
+        for (Segment segment : path) {
+            if (distanceTraveled <= segment.getLength()) {
+                return segment.getPointAt(distanceTraveled);
+            }
+            distanceTraveled -= segment.getLength();
+        }
+        return path.get(path.size() - 1).getPointAt(currentPosition); // Powinno być ostatnią pozycją na trasie
     }
 
     // Funkcja do rysowania drogi
