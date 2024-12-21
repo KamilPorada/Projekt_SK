@@ -22,6 +22,15 @@ class LineSegment extends Segment {
     }
 
     @Override
+    public Point getStartPoint() {
+        return start;
+    }
+
+    @Override
+    public Point getEndPoint() {
+        return end;
+    }
+    @Override
     public Point getPointAt(double distance) {
         double dx = end.x - start.x;
         double dy = end.y - start.y;

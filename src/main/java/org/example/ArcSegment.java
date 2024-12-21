@@ -51,6 +51,15 @@ class ArcSegment extends Segment {
     public double getLength() {
         return Math.toRadians(Math.abs(endAngle - startAngle)) * Math.sqrt((a * a + b * b) / 2.0);
     }
+    @Override
+    public Point getStartPoint() {
+        return startPoint;
+    }
+
+    @Override
+    public Point getEndPoint() {
+        return endPoint;
+    }
 
     @Override
     public Point getPointAt(double distance) {

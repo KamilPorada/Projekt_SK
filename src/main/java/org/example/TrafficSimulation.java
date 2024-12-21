@@ -3,30 +3,48 @@ package org.example;
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
 public class TrafficSimulation extends JPanel {
 
-    private final int WIDTH = 1440;
-    private final int HEIGHT = 780;
+    private static final int WIDTH = 1440;
+    private static final int HEIGHT = 780;
+    private final int NORTH_STOP_LINE = 140;
+    private final int SOUTH_STOP_LINE = 640;
+    private final int WEST_STOP_LINE = 490;
+    private final int EAST_STOP_LINE = 950;
+
     private final Color GRAY = new Color(169, 169, 169);
     private final Color WHITE = Color.WHITE;
     private final Color GREEN = new Color(34, 139, 34);
     private final List<Car> cars = new ArrayList<>();
+    private int carCounter;        // Licznik samochodów
+
     private final Random random = new Random();
     private final int[] trafficLightStates = new int[6]; // 0 - red, 1 - yellow, 2 - green
-    private int currentPhase = 0;
-    private long phaseStartTime;
+    private long startSimulationTime, starttrafficLightTime;
+    private long simulationTime = 0, trafficLightTime=0;
+    private int actualTour=1;
 
     public TrafficSimulation() {
         this.setPreferredSize(new Dimension(WIDTH, HEIGHT));
         this.setBackground(GREEN);
-        phaseStartTime = System.currentTimeMillis();
+        startSimulationTime = System.currentTimeMillis();
+        starttrafficLightTime = System.currentTimeMillis();
+        carCounter = 1;  // Liczba samochodów zaczyna się od 1
 
         // Timer do aktualizacji samochodów
         Timer updateTimer = new Timer(50, e -> {
-            updateTrafficLights();
+            long currentTime = System.currentTimeMillis();
+
+            simulationTime = (currentTime - startSimulationTime) / 1000;
+            trafficLightTime = (currentTime - starttrafficLightTime) / 1000;
+            if(trafficLightTime>45)
+                starttrafficLightTime = System.currentTimeMillis();
+
+
             for (Car car : cars) {
                 car.move(trafficLightStates); // Przesuń samochód tylko jeśli światło pozwala
                 if (car.hasFinished()) {
@@ -34,12 +52,16 @@ public class TrafficSimulation extends JPanel {
                     break; // Unikamy ConcurrentModificationException
                 }
             }
+            updateTrafficLights();
             repaint();
         });
 
         // Timer do dodawania nowych samochodów
-        Timer spawnTimer = new Timer(1000 + random.nextInt(2000), e -> {
-            cars.add(new Car(chooseRandomPath())); // Dodaj nowy samochód z losową trasą
+        Timer spawnTimer = new Timer(random.nextInt(2000), e -> {
+            // Tworzymy nowy samochód i nadajemy mu numer na podstawie carCounter
+            Car newCar = new Car(chooseRandomPath(), actualTour, carCounter);
+            cars.add(newCar);
+            carCounter++;  // Zwiększamy licznik samochodów
         });
 
         updateTimer.start();
@@ -47,49 +69,46 @@ public class TrafficSimulation extends JPanel {
     }
 
     private void updateTrafficLights() {
-        long elapsed = (System.currentTimeMillis() - phaseStartTime) / 1000;
-        int greenDuration = 10; // 10 sekund zielone
-        int yellowDuration = 2; // 2 sekundy żółte
-        int totalPhaseDuration = greenDuration + yellowDuration * 2; // Całkowity czas fazy
 
-        // Oblicz czas w bieżącej fazie
-        long phaseTime = elapsed % totalPhaseDuration;
-
-        if (phaseTime < greenDuration) {
-            // Zielone światła dla aktywnej fazy
-            switch (currentPhase) {
-                case 0 -> setTrafficLights(new int[]{2, 2, 0, 0, 0, 0}); // Północ/Południe zielone
-                case 1 -> setTrafficLights(new int[]{0, 0, 2, 0, 2, 0}); // Wschód/Zachód prawe pasy zielone
-                case 2 -> setTrafficLights(new int[]{0, 0, 0, 2, 0, 2}); // Wschód/Zachód lewe pasy zielone
-            }
-        } else if (phaseTime < greenDuration + yellowDuration) {
-            // Żółte światła dla aktywnej fazy
-            switch (currentPhase) {
-                case 0 -> setTrafficLights(new int[]{1, 1, 0, 0, 0, 0}); // Północ/Południe żółte
-                case 1 -> setTrafficLights(new int[]{0, 0, 1, 0, 1, 0}); // Wschód/Zachód prawe pasy żółte
-                case 2 -> setTrafficLights(new int[]{0, 0, 0, 1, 0, 1}); // Wschód/Zachód lewe pasy żółte
-            }
-        } else {
-            // Czerwone światła dla wszystkich + przygotowanie na żółte w następnej fazie
-            // Żółte w fazie przygotowującej się do przejścia na zielone
-            int nextPhase = (currentPhase + 1) % 3;
-            switch (nextPhase) {
-                case 0 -> setTrafficLights(new int[]{1, 1, 0, 0, 0, 0}); // Północ/Południe przygotowanie
-                case 1 -> setTrafficLights(new int[]{0, 0, 1, 0, 1, 0}); // Wschód/Zachód prawe pasy przygotowanie
-                case 2 -> setTrafficLights(new int[]{0, 0, 0, 1, 0, 1}); // Wschód/Zachód lewe pasy przygotowanie
-            }
+        if(trafficLightTime>=0 && trafficLightTime<=2){
+            setTrafficLights(new int[]{1, 1, 0, 0, 0, 0});
+            actualTour=1;
+        }
+        else if(trafficLightTime>2 && trafficLightTime<=12){
+            setTrafficLights(new int[]{2, 2, 0, 0, 0, 0});
+            actualTour=1;
+        }
+        else if(trafficLightTime>12 && trafficLightTime<=14){
+            setTrafficLights(new int[]{1, 1, 0, 0, 0, 0});
+            actualTour=1;
+        }
+        else if(trafficLightTime>15 && trafficLightTime<=17){
+            setTrafficLights(new int[]{0, 0, 1, 0, 1, 0});
+            actualTour=2;
+        }
+        else if(trafficLightTime>17 && trafficLightTime<=27){
+            setTrafficLights(new int[]{0, 0, 2, 0, 2, 0});
+            actualTour=2;
+        }
+        else if(trafficLightTime>27 && trafficLightTime<=29){
+            setTrafficLights(new int[]{0, 0, 1, 0, 1, 0});
+            actualTour=2;
+        }
+        else if(trafficLightTime>30 && trafficLightTime<=32)
+        {
+            setTrafficLights(new int[]{0, 0, 0, 1, 0, 1});
+            actualTour=3;
+        }
+        else if(trafficLightTime>32 && trafficLightTime<=42){
+            setTrafficLights(new int[]{0, 0, 0, 2, 0, 2});
+            actualTour=3;
+        }
+        else if(trafficLightTime>42 && trafficLightTime<=44){
+            setTrafficLights(new int[]{0, 0, 0, 1, 0, 1});
+            actualTour=3;
         }
 
-        // Przełącz fazę po pełnym cyklu
-        if (elapsed >= totalPhaseDuration) {
-            phaseStartTime = System.currentTimeMillis();
-            currentPhase = (currentPhase + 1) % 3; // Przełącz fazę (0 -> 1 -> 2 -> 0)
-        }
     }
-
-
-
-
 
     private void setTrafficLights(int[] states) {
         System.arraycopy(states, 0, trafficLightStates, 0, states.length);
@@ -98,59 +117,50 @@ public class TrafficSimulation extends JPanel {
     // Funkcja losująca jedną z 12 tras
     private List<Segment> chooseRandomPath() {
         List<Segment> path = new ArrayList<>();
-        int route = random.nextInt(12) + 1; // Losuj liczbę od 1 do 12
 
-        switch (route) {
-            case 1 -> { // Trasa 1 - północ - wschód
-                path.add(new LineSegment(new Point(WIDTH / 2 - 40, 0), new Point(WIDTH / 2 - 40, HEIGHT / 2)));
-                path.add(new ArcSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2 - 70), new Point(WIDTH / 2 + 45, HEIGHT / 2 + 70), 180, 270));
-                path.add(new LineSegment(new Point(WIDTH / 2, HEIGHT / 2 + 70), new Point(WIDTH, HEIGHT / 2 + 70)));
+        // Sprawdzamy stan świateł i losujemy trasę tylko wtedy, gdy światło na odpowiednich kierunkach jest zielone
+        if (actualTour == 1) { // Północ-Południe
+            if (trafficLightStates[0] == 2 && trafficLightStates[1] == 2) {
+                int route = random.nextInt(2) + 1; // Losuj między trasami 1 i 2
+                if (route == 1) {
+                    path.add(new LineSegment(new Point(WIDTH / 2 - 40, 0), new Point(WIDTH / 2 - 40, HEIGHT / 2)));
+                    path.add(new ArcSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2 - 70), new Point(WIDTH / 2 + 45, HEIGHT / 2 + 70), 180, 270));
+                    path.add(new LineSegment(new Point(WIDTH / 2, HEIGHT / 2 + 70), new Point(WIDTH, HEIGHT / 2 + 70)));
+                } else {
+                    path.add(new LineSegment(new Point(WIDTH / 2 - 40, 0), new Point(WIDTH / 2 - 40, HEIGHT))); // Trasa 2 - północ - południe
+                }
             }
-            case 2 -> path.add(new LineSegment(new Point(WIDTH / 2 - 40, 0), new Point(WIDTH / 2 - 40, HEIGHT))); // Trasa 2 - północ - południe
-            case 3 -> { // Trasa 3 - północ - zachód
-                path.add(new LineSegment(new Point(WIDTH / 2 - 40, 0), new Point(WIDTH / 2 - 40, HEIGHT / 2 - 100)));
-                path.add(new ArcSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2 - 130), new Point(WIDTH / 2 - 120, HEIGHT / 2 - 68), 0, -90));
-                path.add(new LineSegment(new Point(WIDTH / 2 - 80, HEIGHT / 2 - 68), new Point(0, HEIGHT / 2 - 68)));
+        } else if (actualTour == 2) { // Wschód-Zachód
+            if (trafficLightStates[2] == 2 && trafficLightStates[4] == 2) {
+                int route = random.nextInt(2) + 5; // Losuj między trasami 5 i 6
+                if (route == 5) {
+                    path.add(new LineSegment(new Point(WIDTH, HEIGHT / 2 - 68), new Point(0, HEIGHT / 2 - 68))); // Trasa 5 - wschód - zachód
+                } else {
+                    path.add(new LineSegment(new Point(WIDTH, HEIGHT / 2), new Point(WIDTH / 2, HEIGHT / 2)));
+                    path.add(new ArcSegment(new Point(WIDTH / 2 + 40, HEIGHT / 2), new Point(WIDTH / 2 - 40, HEIGHT / 2 + 200), 90, 180));
+                    path.add(new LineSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2 + 100), new Point(WIDTH / 2 - 40, HEIGHT))); // Trasa 6 - wschód - południe
+                }
             }
-            case 4 -> { // Trasa 4 - wschód - północ
-                path.add(new LineSegment(new Point(WIDTH, HEIGHT / 2 - 68), new Point(WIDTH / 2 + 60, HEIGHT / 2 - 68)));
-                path.add(new ArcSegment(new Point(WIDTH / 2 + 80, HEIGHT / 2 - 68), new Point(WIDTH / 2 + 40, HEIGHT / 2 - 100), -90, -180));
-                path.add(new LineSegment(new Point(WIDTH / 2 + 40, HEIGHT / 2 - 85), new Point(WIDTH / 2 + 40, 0)));
-            }
-            case 5 -> path.add(new LineSegment(new Point(WIDTH, HEIGHT / 2 - 68), new Point(0, HEIGHT / 2 - 68))); // Trasa 5 - wschód - zachód
-            case 6 -> { // Trasa 6 - wschód - południe
-                path.add(new LineSegment(new Point(WIDTH, HEIGHT / 2), new Point(WIDTH / 2, HEIGHT / 2)));
-                path.add(new ArcSegment(new Point(WIDTH / 2 + 40, HEIGHT / 2), new Point(WIDTH / 2 - 40, HEIGHT / 2 + 200), 90, 180));
-                path.add(new LineSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2 + 100), new Point(WIDTH / 2 - 40, HEIGHT)));
-            }
-            case 7 -> { // Trasa 7 - południe - wschód
-                path.add(new LineSegment(new Point(WIDTH / 2 + 40, HEIGHT), new Point(WIDTH / 2 + 40, HEIGHT / 2 + 100)));
-                path.add(new ArcSegment(new Point(WIDTH / 2 + 40, HEIGHT / 2 + 130), new Point(WIDTH / 2 + 120, HEIGHT / 2 + 68), 180, 90));
-                path.add(new LineSegment(new Point(WIDTH / 2 + 80, HEIGHT / 2 + 68), new Point(WIDTH, HEIGHT / 2 + 68)));
-            }
-            case 8 -> path.add(new LineSegment(new Point(WIDTH / 2 + 40, HEIGHT), new Point(WIDTH / 2 + 40, 0))); // Trasa 8 - południe - północ
-            case 9 -> { // Trasa 9 - południe - zachód
-                path.add(new LineSegment(new Point(WIDTH / 2 + 40, HEIGHT), new Point(WIDTH / 2 + 40, HEIGHT / 2 - 34)));
-                path.add(new ArcSegment(new Point(WIDTH / 2 + 40, HEIGHT / 2), new Point(WIDTH / 2 - 200, HEIGHT / 2 - 68), 0, 90));
-                path.add(new LineSegment(new Point(WIDTH / 2 - 80, HEIGHT / 2 - 68), new Point(0, HEIGHT / 2 - 68)));
-            }
-            case 10 -> { // Trasa 10 - zachód - południe
-                path.add(new LineSegment(new Point(0, HEIGHT / 2 + 68), new Point(WIDTH / 2 - 80, HEIGHT / 2 + 68)));
-                path.add(new ArcSegment(new Point(WIDTH / 2 - 120, HEIGHT / 2 + 68), new Point(WIDTH / 2 - 40, HEIGHT / 2 + 130), 90, 0));
-                path.add(new LineSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2 + 100), new Point(WIDTH / 2 - 40, HEIGHT)));
-            }
-            case 11 -> path.add(new LineSegment(new Point(0, HEIGHT / 2 + 68), new Point(WIDTH, HEIGHT / 2 + 68))); // Trasa 11 - zachód - wschód
-            case 12 -> { // Trasa 12 - zachód - północ
-                path.add(new LineSegment(new Point(0, HEIGHT / 2), new Point(WIDTH / 2, HEIGHT / 2)));
-                path.add(new ArcSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2), new Point(WIDTH / 2 + 40, HEIGHT / 2 - 200), 270, 360));
-                path.add(new LineSegment(new Point(WIDTH / 2 + 40, HEIGHT / 2 - 100), new Point(WIDTH / 2 + 40, 0)));
+        } else if (actualTour == 3) { // Zachód-Południe
+            if (trafficLightStates[3] == 2 && trafficLightStates[5] == 2) {
+                int route = random.nextInt(2) + 9; // Losuj między trasami 9 i 10
+                if (route == 9) {
+                    path.add(new LineSegment(new Point(WIDTH / 2 + 40, HEIGHT), new Point(WIDTH / 2 + 40, HEIGHT / 2 - 34)));
+                    path.add(new ArcSegment(new Point(WIDTH / 2 + 40, HEIGHT / 2), new Point(WIDTH / 2 - 200, HEIGHT / 2 - 68), 0, 90));
+                    path.add(new LineSegment(new Point(WIDTH / 2 - 80, HEIGHT / 2 - 68), new Point(0, HEIGHT / 2 - 68))); // Trasa 9 - południe - zachód
+                } else {
+                    path.add(new LineSegment(new Point(0, HEIGHT / 2 + 68), new Point(WIDTH / 2 - 80, HEIGHT / 2 + 68)));
+                    path.add(new ArcSegment(new Point(WIDTH / 2 - 120, HEIGHT / 2 + 68), new Point(WIDTH / 2 - 40, HEIGHT / 2 + 130), 90, 0));
+                    path.add(new LineSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2 + 100), new Point(WIDTH / 2 - 40, HEIGHT))); // Trasa 10 - zachód - południe
+                }
             }
         }
 
         return path;
     }
 
-    private void drawRoad(Graphics g, int startX, int startY, int length, int laneWidth, int laneCount, boolean isHorizontal) {
+
+    private void drawRoad(Graphics g, int startX, int startY, int length, int laneWidth, int laneCount, boolean isHorizontal, boolean isDirectional) {
         int roadWidth = laneWidth * laneCount;
 
         if (isHorizontal) {
@@ -170,6 +180,21 @@ public class TrafficSimulation extends JPanel {
                     g.drawLine(x, y, x + 10, y); // Segment przerywanej linii
                 }
             }
+
+            // Rysowanie linii przerywanej prostopadłej do kierunku drogi
+            if(isDirectional){
+                int stopLineX = startX + length - 150; // 150 jednostek przed końcem drogi
+                for (int y = startY+70; y <= startY + roadWidth-5; y += 20) {
+                    g.drawLine(stopLineX, y, stopLineX, y + 10); // Segment przerywanej linii prostopadłej
+                }
+            }
+            else{
+                int stopLineX = startX + 150; // 150 jednostek przed końcem drogi
+                for (int y = startY; y <= startY + roadWidth-70; y += 20) {
+                    g.drawLine(stopLineX, y, stopLineX, y + 10); // Segment przerywanej linii prostopadłej
+                }
+            }
+
         } else {
             startX = startX - roadWidth / 2;
             g.setColor(GRAY);
@@ -187,15 +212,31 @@ public class TrafficSimulation extends JPanel {
                     g.drawLine(x, y, x, y + 10); // Segment przerywanej linii
                 }
             }
-        }}
+
+            // Rysowanie linii przerywanej prostopadłej do kierunku drogi
+            if(isDirectional){
+                int stopLineY = startY + 150; // 150 jednostek przed końcem drogi
+                for (int x = startX+85; x <= startX + roadWidth-5; x += 20) {
+                    g.drawLine(x, stopLineY, x + 10, stopLineY); // Segment przerywanej linii prostopadłej
+                }
+            }
+            else{
+                int stopLineY = startY + length - 150; // 150 jednostek przed końcem drogi
+                for (int x = startX+5; x <= startX + roadWidth-85; x += 20) {
+                    g.drawLine(x, stopLineY, x + 10, stopLineY); // Segment przerywanej linii prostopadłej
+                }
+            }
+        }
+    }
+
 
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        drawRoad(g, WIDTH / 2, 0, HEIGHT / 2 - 100, 80, 2, false);
-        drawRoad(g, WIDTH / 2, HEIGHT / 2 + 100, HEIGHT / 2 - 100, 80, 2, false);
-        drawRoad(g, 0, HEIGHT / 2, WIDTH / 2 - 80, 67, 3, true);
-        drawRoad(g, WIDTH / 2 + 80, HEIGHT / 2, WIDTH / 2 - 80, 67, 3, true);
+        drawRoad(g, WIDTH / 2, 0, HEIGHT / 2 - 100, 80, 2, false,false); //północ
+        drawRoad(g, WIDTH / 2, HEIGHT / 2 + 100, HEIGHT / 2 - 100, 80, 2, false,true); //południe
+        drawRoad(g, 0, HEIGHT / 2, WIDTH / 2 - 80, 67, 3, true,true); // zachód
+        drawRoad(g, WIDTH / 2 + 80, HEIGHT / 2, WIDTH / 2 - 80, 67, 3, true,false);  //wschód
         g.setColor(GRAY);
         g.fillRect(WIDTH / 2 - 80, HEIGHT / 2 - 100, 160, 201);
 
@@ -252,10 +293,15 @@ public class TrafficSimulation extends JPanel {
     private static class Car {
         private final List<Segment> path;
         private double currentPosition;
+        private int actualTour;  // Dodaj zmienną do klasy Car
+        private int carNumber;  // Numer samochodu
 
-        public Car(List<Segment> path) {
+
+        public Car(List<Segment> path, int actualTour, int carNumber) {
             this.path = path;
             this.currentPosition = 0;
+            this.actualTour = actualTour;  // Ustaw wartość actualTour
+            this.carNumber = carNumber;
         }
 
         public void move(int[] trafficLightStates) {
@@ -266,19 +312,48 @@ public class TrafficSimulation extends JPanel {
         }
 
         private boolean canMove(int[] trafficLightStates) {
-            // Implementacja sprawdzania, czy samochód może się ruszać na podstawie świateł
-            return true; // Placeholder
+//            // Przykład dla tury 1 - północ i południe
+//            if (actualTour == 1) {
+//                // Sprawdź, czy światło na północy jest zielone (trafficLightStates[0] == 2) i na południu (trafficLightStates[1] == 2)
+//                if (trafficLightStates[0] == 2 && trafficLightStates[1] == 2) {
+//                    return true; // Możesz się poruszać
+//                }
+//            }
+//            // Przykład dla tury 2 - wschód i zachód
+//            else if (actualTour == 2) {
+//                // Sprawdź, czy światła na wschodzie i zachodzie są zielone
+//                if (trafficLightStates[2] == 2 && trafficLightStates[4] == 2) {
+//                    return true; // Możesz się poruszać
+//                }
+//            }
+//            // Przykład dla tury 3 - wschód i zachód
+//            else if (actualTour == 3) {
+//                // Sprawdź, czy światła na wschodzie i zachodzie są zielone
+//                if (trafficLightStates[3] == 2 && trafficLightStates[5] == 2) {
+//                    return true; // Możesz się poruszać
+//                }
+//            }
+            return true; // Jeżeli nie pasuje żadna tura lub światło jest czerwone
         }
+
+
 
         public boolean hasFinished() {
             return currentPosition > getTotalPathLength();
         }
 
         public void draw(Graphics g) {
-            Point position = getCarPosition();
+            Point position = getCarPosition(); // Pobieramy pozycję samochodu
+
+            // Rysowanie samochodu jako kropki
             g.setColor(Color.RED);
-            g.fillOval(position.x - 5, position.y - 5, 10, 10);
+            g.fillOval(position.x - 5, position.y - 5, 10, 10); // Rysowanie kropki w odpowiedniej pozycji
+
+            // Rysowanie numeru samochodu obok kropki
+            g.setColor(Color.BLACK); // Kolor numeru
+            g.drawString(String.valueOf(carNumber), position.x + 10, position.y); // Rysowanie numeru samochodu
         }
+
 
         private Point getCarPosition() {
             double distanceTraveled = currentPosition;
