@@ -12,7 +12,7 @@ class LineSegment extends Segment {
 
     @Override
     public void draw(Graphics g) {
-//        g.setColor(Color.BLUE);
+        g.setColor(Color.BLUE);
         g.drawLine(start.x, start.y, end.x, end.y);
     }
 

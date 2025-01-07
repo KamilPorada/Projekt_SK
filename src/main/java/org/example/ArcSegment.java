@@ -30,7 +30,7 @@ class ArcSegment extends Segment {
 
     @Override
     public void draw(Graphics g) {
-//        g.setColor(Color.BLUE);
+        g.setColor(Color.BLUE);
 
         // Normalizacja kątów
         int normalizedStartAngle = (int) startAngle;
