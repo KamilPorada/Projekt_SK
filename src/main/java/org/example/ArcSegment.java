@@ -3,9 +3,9 @@ package org.example;
 import java.awt.*;
 
 class ArcSegment extends Segment {
-    private Point startPoint, endPoint; // Punkty początkowy i końcowy łuku
-    private Point center;              // Środek elipsy
-    private int a, b;                  // Półosie elipsy (a - pozioma, b - pionowa)
+    private Point startPoint, endPoint;
+    private Point center;
+    private int a, b;
     private double startAngle, endAngle;
 
     public ArcSegment(Point startPoint, Point endPoint, double startAngle, double endAngle) {
@@ -13,36 +13,29 @@ class ArcSegment extends Segment {
         this.endPoint = endPoint;
         this.startAngle = startAngle;
         this.endAngle = endAngle;
-
         calculateCenterAndAxes();
     }
 
-    // Obliczanie środka i półosi elipsy
     private void calculateCenterAndAxes() {
         int centerX = (startPoint.x + endPoint.x) / 2;
         int centerY = (startPoint.y + endPoint.y) / 2;
         center = new Point(centerX, centerY);
 
-        // Półosie elipsy
-        a = Math.abs(startPoint.x - endPoint.x) / 2; // Pozioma półoś
-        b = Math.abs(startPoint.y - endPoint.y) / 2; // Pionowa półoś
+        a = Math.abs(startPoint.x - endPoint.x) / 2;
+        b = Math.abs(startPoint.y - endPoint.y) / 2;
     }
 
     @Override
     public void draw(Graphics g) {
         g.setColor(Color.BLUE);
 
-        // Normalizacja kątów
         int normalizedStartAngle = (int) startAngle;
         int normalizedArcAngle = (int) (endAngle - startAngle);
 
-        // Poprawienie przypadku ujemnych kątów
         if (normalizedArcAngle < 0) {
-            normalizedStartAngle += normalizedArcAngle; // Przesunięcie startu
-            normalizedArcAngle = -normalizedArcAngle;  // Odwrócenie łuku
+            normalizedStartAngle += normalizedArcAngle;
+            normalizedArcAngle = -normalizedArcAngle;
         }
-
-        // Rysowanie łuku
         g.drawArc(center.x - a, center.y - b, 2 * a, 2 * b,
                 normalizedStartAngle, normalizedArcAngle);
     }
@@ -67,7 +60,6 @@ class ArcSegment extends Segment {
         double ratio = distance / (totalAngle * Math.sqrt((a * a + b * b) / 2.0));
         double angle;
 
-        // Kąt na podstawie normalizacji
         if (startAngle <= endAngle) {
             angle = Math.toRadians(startAngle) + ratio * totalAngle;
         } else {

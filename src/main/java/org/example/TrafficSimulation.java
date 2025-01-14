@@ -3,6 +3,9 @@ package org.example;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.AffineTransform;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -14,36 +17,30 @@ public class TrafficSimulation extends JPanel {
     private static final int WIDTH = 1440;
     private static final int HEIGHT = 780;
     private final Color GRAY = new Color(169, 169, 169);
-    private final Color WHITE = Color.WHITE;
+
     private final Color GREEN = new Color(34, 139, 34);
     private final List<Car> cars = new ArrayList<>();
-    private ArrayList<Person> people = new ArrayList<>(); // Lista osób (kropek)
+    private ArrayList<Person> people = new ArrayList<>();
 
     private int carCounter, personNumber;
 
     private final Random random = new Random();
     private final int[] trafficLightStates = new int[6]; // 0 - red, 1 - yellow, 2 - green, 3 - failure
     private int pedestrianLightStates = 2; // 0 - red, 1 - yellow, 2 - green,
-
+    int[][] carTypeCounts = new int[12][5];
+    List<Double>[] carTypeSpeeds = new ArrayList[5];
+    int[] trafficLightsFailure = new int[6]; // 0: działa, 1: awaria
+    int[][] pedestrianCounts = new int[4][2];
     private long startSimulationTime, starttrafficLightTime;
     private long simulationTime = 0, trafficLightTime = 0;
     private int actualTour = 1;
-    private int[] carCounts = new int[5]; // 0: car, 1: SUV, 2: bus, 3: truck, 4: motorcycle
-    private int[] carsInEachRoute = new int[12];
-    int[] trafficLightsFailure = new int[6]; // 0: działa, 1: awaria
 
-    // Dostępne pasy dla różnych wartości actualTour
     int[][] lanesForTour = {
-            {0, 1, 2, 3, 4, 5}, // actualTour = 1
-            {6, 7, 8, 9},       // actualTour = 2
-            {10, 11}            // actualTour = 3
+            {0, 1, 2, 3, 4, 5},
+            {6, 7, 8, 9},
+            {10, 11}
     };
     private Timer spawnTimer;
-
-
-
-
-
 
     public TrafficSimulation() {
         this.setPreferredSize(new Dimension(WIDTH, HEIGHT));
@@ -53,22 +50,35 @@ public class TrafficSimulation extends JPanel {
         carCounter = 1;
         personNumber=1;
 
+        for (int i = 0; i < carTypeSpeeds.length; i++) {
+            carTypeSpeeds[i] = new ArrayList<>();
+        }
+
         Timer updateTimer = new Timer(30, e -> {
             long currentTime = System.currentTimeMillis();
 
             simulationTime = (currentTime - startSimulationTime) / 1000;
             trafficLightTime = (currentTime - starttrafficLightTime) / 1000;
-            if (trafficLightTime > 45){
+            if (trafficLightTime > 45) {
                 starttrafficLightTime = System.currentTimeMillis();
                 generateTrafficLightFailure();
-                generateRandomPeople();
+                generateRandomPeople(false);
+            }
+
+            if (simulationTime > 135) {
+                JOptionPane.showMessageDialog(null, "Symulacja zakończona!", "Koniec symulacji", JOptionPane.INFORMATION_MESSAGE);
+                try {
+                    saveSimulationResultsToCSV("simulation_results.csv");
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+                System.exit(0);
             }
 
             for (Car car : cars) {
-                car.move(cars, trafficLightStates);
+                car.move(cars);
                 if (car.hasFinished()) {
                     cars.remove(car);
-                    carCounts[car.getType()]++;
                     break;
                 }
             }
@@ -86,29 +96,57 @@ public class TrafficSimulation extends JPanel {
             int chosenLane = chooseLane(random, lanesForTour[actualTour - 1], weights, totalWeight);
             double lambda = getLambdaForLane(chosenLane);
             double timeBetweenCars = generateExponentialTime(random, lambda);
+            spawnTimer.setDelay((int) (timeBetweenCars * 1000));
 
-            System.out.println("Wygenerowano samochód na pasie: " + chosenLane +
-                    " | Czas do następnego: " + timeBetweenCars + " sekund");
-
-            // Ustawiamy czas do następnego spawnowania samochodu na podstawie obliczonego czasu
-            spawnTimer.setDelay((int) (timeBetweenCars * 1000)); // Ustawiamy opóźnienie w milisekundach
-
-            // Tworzymy nowy pojazd
             if (Arrays.stream(trafficLightStates).anyMatch(state -> state == 2)) {
-                Car newCar = new Car(chooseRandomPath(chosenLane), carCounter, getRandomCarType());
-                System.out.println("Samochód:"+getRandomCarType());
+                int randomCarType = getRandomCarType();
+                Car newCar = new Car(chooseRandomPath(chosenLane), carCounter, randomCarType);
                 cars.add(newCar);
                 carCounter++;
+                carTypeCounts[chosenLane][randomCarType]++;
+                carTypeSpeeds[randomCarType].add(newCar.getSpeed());
             }
         });
 
         updateTimer.start();
         spawnTimer.start();
-        generateRandomPeople();
-
+        generateRandomPeople(true);
     }
 
+    private void saveSimulationResultsToCSV(String filePath) throws IOException {
+        String timestamp = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
 
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath, true))) {
+            writer.write("Symulacja " + timestamp + "\n");
+            writer.write("Car Type Counts (Lane x Type):\n");
+            for (int lane = 0; lane < carTypeCounts.length; lane++) {
+                for (int type = 0; type < carTypeCounts[lane].length; type++) {
+                    writer.write(carTypeCounts[lane][type] + (type == carTypeCounts[lane].length - 1 ? "\n" : ","));
+                }
+            }
+
+            writer.write("Car Type Speeds (Type x Speeds):\n");
+            for (int type = 0; type < carTypeSpeeds.length; type++) {
+                writer.write("Type " + type + ":");
+                for (double speed : carTypeSpeeds[type]) {
+                    writer.write(speed + ",");
+                }
+                writer.write("\n");
+            }
+
+            writer.write("Traffic Lights Failures:\n");
+            for (int i = 0; i < trafficLightsFailure.length; i++) {
+                writer.write("Light " + i + ": " + trafficLightsFailure[i] + "\n");
+            }
+
+            writer.write("Pedestrian Counts (Rectangle x Gender):\n");
+            for (int rect = 0; rect < pedestrianCounts.length; rect++) {
+                writer.write("Rectangle " + rect + ": Women=" + pedestrianCounts[rect][0] + ", Men=" + pedestrianCounts[rect][1] + "\n");
+            }
+
+            writer.write("\n=========================================\n\n");
+        }
+    }
 
     private void moveAllPeople() {
         for (Person person : people) {
@@ -116,70 +154,87 @@ public class TrafficSimulation extends JPanel {
         }
     }
 
-    private void generateRandomPeople() {
-        Random random = new Random();
-        int numberOfPeople = 10+random.nextInt(20); // Liczba osób od 0 do 50
+    private int poisson(Random random, double lambda) {
+        double l = Math.exp(-lambda);
+        double p = 1.0;
+        int k = 0;
 
-        // Definicja prostokątów
-        int[][] rects = {
-                {WIDTH - 160, HEIGHT / 2 - 150, 100, 50},  // Prostokąt 1
-                {WIDTH - 160, HEIGHT / 2 + 102, 100, 50},  // Prostokąt 2
-                {60, HEIGHT / 2 - 150, 100, 50},           // Prostokąt 3
-                {60, HEIGHT / 2 + 102, 100, 50}            // Prostokąt 4
+        do {
+            k++;
+            p *= random.nextDouble();
+        } while (p > l);
+
+        return k - 1;
+    }
+
+    private void generateRandomPeople(boolean isInitial) {
+        Random random = new Random();
+        double lambda = 20.0;
+        int numberOfPeople = poisson(random, lambda);
+
+        int[][] initialRects = {
+                {WIDTH - 160, HEIGHT / 2 - 150, 100, 50},
+                {WIDTH - 160, HEIGHT / 2 + 102, 100, 50},
+                {60, HEIGHT / 2 - 150, 100, 50},
+                {60, HEIGHT / 2 + 102, 100, 50}
         };
 
-        // Losowanie osób w obrębie prostokątów
+        int[][] normalRects = {
+                {WIDTH - 160, 0, 100, 50},
+                {WIDTH - 160, HEIGHT, 100, 50},
+                {60, 0, 100, 50},
+                {60, HEIGHT, 100, 50}
+        };
+
+        int[][] rects = isInitial ? initialRects : normalRects;
+
         for (int i = 0; i < numberOfPeople; i++) {
-            // Wybór prostokąta losowo
             int rectIndex = random.nextInt(rects.length);
             int rectX = rects[rectIndex][0];
             int rectY = rects[rectIndex][1];
             int rectWidth = rects[rectIndex][2];
             int rectHeight = rects[rectIndex][3];
 
-            // Losowanie pozycji w obrębie wybranego prostokąta
             int x = rectX + random.nextInt(rectWidth);
             int y = rectY + random.nextInt(rectHeight);
 
-            // Losowanie płci (0 - kobieta, 1 - mężczyzna)
-            int gender = random.nextInt(2); // 0 lub 1
+            int gender;
+            if (rectIndex == 0 || rectIndex == 1) {
+                gender = random.nextDouble() < 0.7 ? 0 : 1;
+            } else {
+                gender = random.nextDouble() < 0.7 ? 1 : 0;
+            }
 
-            // Określenie kierunku w zależności od prostokąta
-            int direction = (rectIndex == 1 || rectIndex == 3) ? 0 : 1; // 0 - północ (prostokąty 2 i 4), 1 - południe (prostokąty 1 i 3)
+            int direction = (rectIndex == 1 || rectIndex == 3) ? 0 : 1;
 
-            // Tworzenie nowej osoby z określonym kierunkiem
             Person person = new Person(x, y, gender, direction, personNumber);
             personNumber++;
+            pedestrianCounts[rectIndex][gender]++;
 
-            // Sprawdzanie, czy kropka koliduje z istniejącymi
             boolean collides;
             do {
                 collides = false;
                 for (Person existingPerson : people) {
                     if (person.intersects(existingPerson)) {
-                        collides = true; // Jeśli koliduje, szukamy nowej pozycji
+                        collides = true;
                         break;
                     }
                 }
                 if (collides) {
-                    // Generowanie nowej pozycji, jeśli kropka koliduje
                     x = rectX + random.nextInt(rectWidth);
                     y = rectY + random.nextInt(rectHeight);
-                    person = new Person(x, y, gender, direction, personNumber); // Tworzymy nową osobę
+                    person = new Person(x, y, gender, direction, personNumber);
+                    pedestrianCounts[rectIndex][gender]++;
                     personNumber++;
                 }
-            } while (collides); // Dopóki koliduje, próbujemy ponownie
-
-            // Dodanie osoby do listy
+            } while (collides);
             people.add(person);
         }
     }
 
-
-
     private int getRandomCarType() {
-        double[] probabilities = {0.4, 0.3, 0.25, 0.2, 0.15}; // Prawdopodobieństwa
-        double rand = random.nextDouble(); // Losowa liczba od 0 do 1
+        double[] probabilities = {0.4, 0.25, 0.15, 0.1, 0.1};
+        double rand = random.nextDouble();
         double cumulativeProbability = 0.0;
         for (int i = 0; i < probabilities.length; i++) {
             cumulativeProbability += probabilities[i];
@@ -190,17 +245,15 @@ public class TrafficSimulation extends JPanel {
         return 0;
     }
 
-
     private static int[] getLaneWeights(int actualTour) {
         return switch (actualTour) {
-            case 1 -> new int[]{20, 15, 5, 10, 10, 5}; // Wagi dla pasów 0-5
-            case 2 -> new int[]{50, 20, 10, 20};       // Wagi dla pasów 6-9
-            case 3 -> new int[]{70, 30};              // Wagi dla pasów 10-11
+            case 1 -> new int[]{20, 15, 5, 10, 10, 5};
+            case 2 -> new int[]{50, 20, 10, 20};
+            case 3 -> new int[]{70, 30};
             default -> throw new IllegalArgumentException("Nieprawidłowa wartość actualTour");
         };
     }
 
-    // Metoda do losowania pasa na podstawie wag
     private static int chooseLane(Random random, int[] lanes, int[] weights, int totalWeight) {
         int randomValue = random.nextInt(totalWeight);
         int cumulativeWeight = 0;
@@ -211,21 +264,19 @@ public class TrafficSimulation extends JPanel {
                 return lanes[i];
             }
         }
-        return -1; // Nie powinno się zdarzyć
+        return -1;
     }
 
-    // Generowanie czasu między samochodami (rozklad wykładniczy)
     private static double generateExponentialTime(Random random, double lambda) {
         double u = random.nextDouble();
         return -Math.log(1 - u) / lambda;
     }
 
-    // Pobieranie wartości lambda dla konkretnego pasa
     private static double getLambdaForLane(int lane) {
 
-        if(lane == 0 || lane==6 || lane==10) return 3;
-        if(lane == 1 || lane == 4) return 1;
-        if(lane==7 || lane==9) return 0.8;
+        if(lane == 0 || lane==6 || lane==10) return 3.5;
+        if(lane == 1 || lane == 4) return 1.5;
+        if(lane==7 || lane==9) return 1;
         if(lane == 2 || lane==3 || lane==5 || lane==8) return 0.5;
         if(lane == 11) return 0.2;
         return 0.1;
@@ -278,30 +329,25 @@ public class TrafficSimulation extends JPanel {
             baseTrafficLights = new int[]{0, 0, 0, 1, 0, 1};
             actualTour = 3;
         } else {
-            baseTrafficLights = new int[]{0, 0, 0, 0, 0, 0}; // Domyślne, wszystkie światła wyłączone
+            baseTrafficLights = new int[]{0, 0, 0, 0, 0, 0};
             actualTour = 1;
         }
 
-        // Uwzględnienie awarii: każde uszkodzone światło ustawia się na żółte (1)
         for (int i = 0; i < baseTrafficLights.length; i++) {
             if (trafficLightsFailure[i] == 1) {
-                baseTrafficLights[i] = 3; // Nadpisz stan na żółty migający
+                baseTrafficLights[i] = 3;
             }
         }
-
         setTrafficLights(baseTrafficLights);
     }
 
-
     private void generateTrafficLightFailure() {
-        double failureProbability = 0.05; // 5% szans na awarię
+        double failureProbability = 0.05;
         Random random = new Random();
 
         for (int i = 0; i < trafficLightsFailure.length; i++) {
-            // Generuj zdarzenie z rozkładu Bernoulliego
             if (random.nextDouble() < failureProbability) {
-                trafficLightsFailure[i] = 1; // Światło uległo awarii
-                System.out.println("Światło nr " + (i + 1) + " uległo awarii!");
+                trafficLightsFailure[i] = 1;
             }
         }
     }
@@ -318,53 +364,47 @@ public class TrafficSimulation extends JPanel {
             if (trafficLightStates[0] == 2 || trafficLightStates[1] == 2) {
                 switch (chosenLane) {
                     case 0:
-                        // średnie (częściej wybierane) północ-wschód
+                        // Pas północ-wschód
                         if(trafficLightsFailure[0]==0){
                             path.add(new LineSegment(new Point(WIDTH / 2 - 40, 0), new Point(WIDTH / 2 - 40, HEIGHT / 2)));
                             path.add(new ArcSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2 - 70), new Point(WIDTH / 2 + 45, HEIGHT / 2 + 70), 180, 270));
                             path.add(new LineSegment(new Point(WIDTH / 2, HEIGHT / 2 + 70), new Point(WIDTH, HEIGHT / 2 + 70)));
-                            carsInEachRoute[0]+=1;
                         }
                         break;
                     case 1:
-                        // duże (często wybierane) północ-południe
+                        // Pas północ-południe
                         if(trafficLightsFailure[0]==0) {
                             path.add(new LineSegment(new Point(WIDTH / 2 - 40, 0), new Point(WIDTH / 2 - 40, HEIGHT)));
-                            carsInEachRoute[1] += 1;
                         }
                         break;
                     case 2:
-                        // małe (rzadziej wybierane) północ-zachód
+                        // Pas północ-zachód
                         if(trafficLightsFailure[0]==0) {
                             path.add(new LineSegment(new Point(WIDTH / 2 - 40, 0), new Point(WIDTH / 2 - 40, HEIGHT / 2 - 100)));
                             path.add(new ArcSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2 - 130), new Point(WIDTH / 2 - 120, HEIGHT / 2 - 68), 0, -90));
                             path.add(new LineSegment(new Point(WIDTH / 2 - 80, HEIGHT / 2 - 68), new Point(0, HEIGHT / 2 - 68)));
-                            carsInEachRoute[2] += 1;
                         }
                         break;
                     case 3:
-                        // średnie (częściej wybierane) południe-wschód
+                        // Pas południe-wschód
                         if(trafficLightsFailure[1]==0) {
                             path.add(new LineSegment(new Point(WIDTH / 2 + 40, HEIGHT), new Point(WIDTH / 2 + 40, HEIGHT / 2 + 100)));
                             path.add(new ArcSegment(new Point(WIDTH / 2 + 40, HEIGHT / 2 + 130), new Point(WIDTH / 2 + 120, HEIGHT / 2 + 68), 180, 90));
                             path.add(new LineSegment(new Point(WIDTH / 2 + 80, HEIGHT / 2 + 68), new Point(WIDTH, HEIGHT / 2 + 68)));
-                            carsInEachRoute[3] += 1;
                         }
                         break;
                     case 4:
-                        // duże (częściej wybierane) południe-północ
+                        // Pas południe-północ
                         if(trafficLightsFailure[1]==0) {
                             path.add(new LineSegment(new Point(WIDTH / 2 + 40, HEIGHT), new Point(WIDTH / 2 + 40, 0)));
-                            carsInEachRoute[4] += 1;
                         }
                         break;
                     case 5:
-                        // małe (rzadziej wybierane) południe-zachód
+                        // Pas południe-zachód
                         if(trafficLightsFailure[1]==0) {
                             path.add(new LineSegment(new Point(WIDTH / 2 + 40, HEIGHT), new Point(WIDTH / 2 + 40, HEIGHT / 2 - 34)));
                             path.add(new ArcSegment(new Point(WIDTH / 2 + 40, HEIGHT / 2), new Point(WIDTH / 2 - 200, HEIGHT / 2 - 68), 0, 90));
                             path.add(new LineSegment(new Point(WIDTH / 2 - 80, HEIGHT / 2 - 68), new Point(0, HEIGHT / 2 - 68)));
-                            carsInEachRoute[5] += 1;
                         }
                         break;
                 }
@@ -373,35 +413,31 @@ public class TrafficSimulation extends JPanel {
             if (trafficLightStates[2] == 2 || trafficLightStates[4] == 2) {
                 switch (chosenLane) {
                     case 6:
-                        // duże (częściej wybierane) wschód-północ
+                        // Pas wschód-północ
                         if(trafficLightsFailure[2]==0) {
                             path.add(new LineSegment(new Point(WIDTH, HEIGHT / 2 - 68), new Point(WIDTH / 2 + 60, HEIGHT / 2 - 68)));
                             path.add(new ArcSegment(new Point(WIDTH / 2 + 80, HEIGHT / 2 - 68), new Point(WIDTH / 2 + 40, HEIGHT / 2 - 100), -90, -180));
                             path.add(new LineSegment(new Point(WIDTH / 2 + 40, HEIGHT / 2 - 85), new Point(WIDTH / 2 + 40, 0)));
-                            carsInEachRoute[6] += 1;
                         }
                         break;
                     case 7:
-                        // średnie wschód-zachód
+                        // Pas wschód-zachód
                         if(trafficLightsFailure[2]==0) {
                             path.add(new LineSegment(new Point(WIDTH, HEIGHT / 2 - 68), new Point(0, HEIGHT / 2 - 68)));
-                            carsInEachRoute[7] += 1;
                         }
                         break;
                     case 8:
-                        // duże (częściej wybierane) zachód-południe
+                        // Pas zachód-południe
                         if(trafficLightsFailure[4]==0) {
                             path.add(new LineSegment(new Point(0, HEIGHT / 2 + 68), new Point(WIDTH / 2 - 80, HEIGHT / 2 + 68)));
                             path.add(new ArcSegment(new Point(WIDTH / 2 - 120, HEIGHT / 2 + 68), new Point(WIDTH / 2 - 40, HEIGHT / 2 + 130), 90, 0));
                             path.add(new LineSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2 + 100), new Point(WIDTH / 2 - 40, HEIGHT)));
-                            carsInEachRoute[8] += 1;
                         }
                         break;
                     case 9:
-                        // średnie zachód-wschód
+                        // Pas zachód-wschód
                         if(trafficLightsFailure[4]==0) {
                             path.add(new LineSegment(new Point(0, HEIGHT / 2 + 68), new Point(WIDTH, HEIGHT / 2 + 68)));
-                            carsInEachRoute[9] += 1;
                         }
                         break;
                 }
@@ -410,32 +446,26 @@ public class TrafficSimulation extends JPanel {
             if (trafficLightStates[3] == 2 || trafficLightStates[5] == 2) {
                 switch (chosenLane) {
                     case 10:
-                        // małe (rzadziej wybierane) wschód-południe
+                        // Pas wschód-południe
                         if(trafficLightsFailure[3]==0) {
                             path.add(new LineSegment(new Point(WIDTH, HEIGHT / 2), new Point(WIDTH / 2, HEIGHT / 2)));
                             path.add(new ArcSegment(new Point(WIDTH / 2 + 40, HEIGHT / 2), new Point(WIDTH / 2 - 40, HEIGHT / 2 + 200), 90, 180));
                             path.add(new LineSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2 + 100), new Point(WIDTH / 2 - 40, HEIGHT)));
-                            carsInEachRoute[10] += 1;
                         }
                         break;
                     case 11:
-                        // małe (rzadziej wybierane) zachód-północ
+                        // Pas zachód-północ
                         if(trafficLightsFailure[5]==0) {
                             path.add(new LineSegment(new Point(0, HEIGHT / 2), new Point(WIDTH / 2, HEIGHT / 2)));
                             path.add(new ArcSegment(new Point(WIDTH / 2 - 40, HEIGHT / 2), new Point(WIDTH / 2 + 40, HEIGHT / 2 - 200), 270, 360));
                             path.add(new LineSegment(new Point(WIDTH / 2 + 40, HEIGHT / 2 - 100), new Point(WIDTH / 2 + 40, 0)));
-                            carsInEachRoute[11] += 1;
                         }
                         break;
                 }
             }
         }
-
         return path;
     }
-
-
-
 
     private void drawRoad(Graphics g, int startX, int startY, int length, int laneWidth, int laneCount, boolean isHorizontal, boolean isDirectional) {
         int roadWidth = laneWidth * laneCount;
@@ -445,29 +475,26 @@ public class TrafficSimulation extends JPanel {
             g.setColor(GRAY);
             g.fillRect(startX, startY, length, roadWidth);
 
-            // Rysowanie białych linii granicznych
-            g.setColor(WHITE);
-            g.drawLine(startX, startY, startX + length, startY); // Górna granica
-            g.drawLine(startX, startY + roadWidth, startX + length, startY + roadWidth); // Dolna granica
+            g.setColor(Color.WHITE);
+            g.drawLine(startX, startY, startX + length, startY);
+            g.drawLine(startX, startY + roadWidth, startX + length, startY + roadWidth);
 
-            // Rysowanie przerywanych linii między pasami
             for (int i = 1; i < laneCount; i++) {
                 int y = startY + i * laneWidth;
                 for (int x = startX; x < startX + length; x += 20) {
-                    g.drawLine(x, y, x + 10, y); // Segment przerywanej linii
+                    g.drawLine(x, y, x + 10, y);
                 }
             }
 
-            // Rysowanie linii przerywanej prostopadłej do kierunku drogi
             if (isDirectional) {
-                int stopLineX = startX + length - 620; // 150 jednostek przed końcem drogi
+                int stopLineX = startX + length - 620;
                 for (int y = startY + 70; y <= startY + roadWidth - 5; y += 20) {
-                    g.drawLine(stopLineX, y, stopLineX, y + 10); // Segment przerywanej linii prostopadłej
+                    g.drawLine(stopLineX, y, stopLineX, y + 10);
                 }
             } else {
-                int stopLineX = startX + 620; // 150 jednostek przed końcem drogi
+                int stopLineX = startX + 620;
                 for (int y = startY; y <= startY + roadWidth - 70; y += 20) {
-                    g.drawLine(stopLineX, y, stopLineX, y + 10); // Segment przerywanej linii prostopadłej
+                    g.drawLine(stopLineX, y, stopLineX, y + 10);
                 }
             }
 
@@ -476,29 +503,26 @@ public class TrafficSimulation extends JPanel {
             g.setColor(GRAY);
             g.fillRect(startX, startY, roadWidth, length);
 
-            // Rysowanie białych linii granicznych
-            g.setColor(WHITE);
-            g.drawLine(startX, startY, startX, startY + length); // Lewa granica
-            g.drawLine(startX + roadWidth, startY, startX + roadWidth, startY + length); // Prawa granica
+            g.setColor(Color.WHITE);
+            g.drawLine(startX, startY, startX, startY + length);
+            g.drawLine(startX + roadWidth, startY, startX + roadWidth, startY + length);
 
-            // Rysowanie przerywanych linii między pasami
             for (int i = 1; i < laneCount; i++) {
                 int x = startX + i * laneWidth;
                 for (int y = startY; y < startY + length; y += 20) {
-                    g.drawLine(x, y, x, y + 10); // Segment przerywanej linii
+                    g.drawLine(x, y, x, y + 10);
                 }
             }
 
-            // Rysowanie linii przerywanej prostopadłej do kierunku drogi
             if (isDirectional) {
-                int stopLineY = startY + 270; // 150 jednostek przed końcem drogi
+                int stopLineY = startY + 270;
                 for (int x = startX + 85; x <= startX + roadWidth - 5; x += 20) {
-                    g.drawLine(x, stopLineY, x + 10, stopLineY); // Segment przerywanej linii prostopadłej
+                    g.drawLine(x, stopLineY, x + 10, stopLineY);
                 }
             } else {
-                int stopLineY = startY + length - 270; // 150 jednostek przed końcem drogi
+                int stopLineY = startY + length - 270;
                 for (int x = startX + 5; x <= startX + roadWidth - 85; x += 20) {
-                    g.drawLine(x, stopLineY, x + 10, stopLineY); // Segment przerywanej linii prostopadłej
+                    g.drawLine(x, stopLineY, x + 10, stopLineY);
                 }
             }
         }
@@ -534,8 +558,45 @@ public class TrafficSimulation extends JPanel {
         rotateArrow(g, WIDTH/2-40, HEIGHT/2-130, 20, 0);
         rotateArrow(g, WIDTH/2-40, HEIGHT/2-130, 20, 180);
 
+        //Strzałka prawo, prosto na wschodniej drodze
+        rotateArrow(g, WIDTH/2+120, HEIGHT/2-66, 40, 180);
+        rotateArrow(g, WIDTH/2+105, HEIGHT/2-66, 20, 270);
 
+        //Strzałka lewo na wschdniej drodze
+        rotateArrow(g, WIDTH/2+90, HEIGHT/2, 20, 90);
+        g.drawLine(WIDTH/2+90, HEIGHT/2,WIDTH/2+120,HEIGHT/2);
 
+        //Strzałka na południowej drodze
+        rotateArrow(g, WIDTH/2+40, HEIGHT/2+145, 40, 270);
+        rotateArrow(g, WIDTH/2+40, HEIGHT/2+130, 20, 0);
+        rotateArrow(g, WIDTH/2+40, HEIGHT/2+130, 20, 180);
+
+        //Strzałka prawo, prosto na zachodniej drodze
+        rotateArrow(g, WIDTH/2-120, HEIGHT/2+66, 40, 0);
+        rotateArrow(g, WIDTH/2-105, HEIGHT/2+66, 20, 90);
+
+        //Strzałka lewo na zachodniej drodze
+        rotateArrow(g, WIDTH/2-90, HEIGHT/2, 20, 270);
+        g.drawLine(WIDTH/2-90, HEIGHT/2,WIDTH/2-120,HEIGHT/2);
+
+        int zebraStartX1 = 60;
+        int zebraEndX1 = 160;
+        int zebraStartX2 = WIDTH - 160;
+        int zebraEndX2 = WIDTH - 60;
+        int zebraStartY = HEIGHT / 2 - 100;
+        int zebraEndY = HEIGHT / 2 + 100;
+        int stripeWidth = 20;
+        int stripeGap = 10;
+
+        g.setColor(Color.WHITE);
+
+        for (int y = zebraStartY; y < zebraEndY; y += stripeWidth + stripeGap) {
+            g.fillRect(zebraStartX1, y, zebraEndX1 - zebraStartX1, stripeWidth);
+        }
+
+        for (int y = zebraStartY; y < zebraEndY; y += stripeWidth + stripeGap) {
+            g.fillRect(zebraStartX2, y, zebraEndX2 - zebraStartX2, stripeWidth);
+        }
 
         for (Car car : cars) {
             car.draw(g);
@@ -548,8 +609,6 @@ public class TrafficSimulation extends JPanel {
                 {60, HEIGHT / 2 + 102, 100, 50}
         };
 
-
-
         Color graphiteColor = new Color(105, 105, 105);
         g.setColor(graphiteColor);
         for (int[] rect : rects) {
@@ -560,68 +619,112 @@ public class TrafficSimulation extends JPanel {
         g.fillRect(50,0,120,289);
         g.fillRect(50,HEIGHT/2+102,120,289);
 
-        // Rysowanie osób (kropek)
         for (Person person : people) {
             person.draw(g);
         }
 
+        int minutes = (int) (simulationTime / 60);
+        int seconds = (int) (simulationTime % 60);
 
+        String formattedTime = String.format("%02d:%02d", minutes, seconds);
 
+        g.setFont(new Font("Arial", Font.PLAIN, 30));
+        g.setColor(Color.WHITE);
 
+        int x = 3 * WIDTH/4-70;
+        int y = 20;
+        int width = 140;
+        int height = 50;
+
+        g.setColor(Color.BLACK);
+        g.fillRoundRect(x, y, width, height, 15, 15);
+
+        g.setColor(Color.GRAY);
+        g.drawRoundRect(x, y, width, height, 15, 15);
+
+        g.setColor(Color.GREEN);
+        g.drawString(formattedTime, x + (width - g.getFontMetrics().stringWidth(formattedTime)) / 2, y + height / 2 + 10);
+
+        drawSign(g,"TOMASZÓW MAZOWIECKI 58",480,50, 0);
+        drawSign(g,"BIAŁOBRZEGI 31",220,510, 90);
+        drawSign(g,"RADOM 32",820,680, 0);
+        drawSign(g,"PRZYSUCHA 18",1120,190, 270);
+    }
+
+    public void drawSign(Graphics g, String placeName, int xOffset, int yOffset, int angle) {
+        g.setFont(new Font("Arial", Font.BOLD, 8));
+        g.setColor(Color.WHITE);
+
+        FontMetrics metrics = g.getFontMetrics();
+        int textWidth = metrics.stringWidth(placeName);
+        int textHeight = 5 * metrics.getHeight() / 2;
+
+        int width = textWidth + 30;
+        int height = textHeight + 10;
+
+        int x = getWidth() - xOffset - width;
+        int y = yOffset;
+
+        int poleX = x + (width / 2) - 1;
+        int poleY = y + height;
+        int poleHeight = 50;
+
+        Graphics2D g2d = (Graphics2D) g;
+        g2d.rotate(Math.toRadians(angle), x + (width / 2), y + (height / 2) + poleHeight / 2);
+
+        g.setColor(new Color(0, 100, 0));
+        g.fillRoundRect(x, y, width, height, 20, 20);
+
+        g.setColor(Color.WHITE);
+        g.drawRoundRect(x, y, width, height, 20, 20);
+
+        g.setColor(Color.WHITE);
+        g.drawString(placeName, x + (width - textWidth) / 2, y + (height + textHeight) / 2 - 10);
+
+        g.setColor(new Color(50, 50, 50));
+        g.fillRect(poleX, poleY, 2, poleHeight);
+
+        g2d.rotate(-Math.toRadians(angle), x + (width / 2), y + (height / 2) + poleHeight / 2);
     }
 
     public void rotateArrow(Graphics g, int startX, int startY, int length, int rotate) {
-        // Rzutowanie Graphics na Graphics2D
         Graphics2D g2d = (Graphics2D) g;
 
-        // Ustawienie grubości linii
-        g2d.setStroke(new BasicStroke(2)); // Grubość linii
-        g2d.setColor(Color.WHITE);         // Kolor linii
+        g2d.setStroke(new BasicStroke(2));
+        g2d.setColor(Color.WHITE);
 
-        // Tworzymy macierz transformacji
         AffineTransform originalTransform = g2d.getTransform();
 
-        // Obracamy rysowanie o zadany kąt
-        g2d.rotate(Math.toRadians(rotate), startX, startY); // Obrót wokół punktu początkowego
+        g2d.rotate(Math.toRadians(rotate), startX, startY);
 
-        // Obliczanie końca strzałki
         int endX = startX + length;
         int endY = startY;
 
-        // Rysowanie głównej linii strzałki
         g2d.drawLine(startX, startY, endX, endY);
 
-        // Rysowanie grotu strzałki
-        int arrowSize = 10; // Wielkość grotu
-        int angle = 45; // Kąt grotu strzałki
+        int arrowSize = 10;
+        int angle = 45;
 
-        // Wyliczanie współrzędnych punktów grotu strzałki
         double rad = Math.toRadians(angle);
 
-        // Lewa część grotu
         int leftX = (int) (endX - arrowSize * Math.cos(rad));
         int leftY = (int) (endY - arrowSize * Math.sin(rad));
 
-        // Prawa część grotu
         int rightX = (int) (endX - arrowSize * Math.cos(-rad));
         int rightY = (int) (endY - arrowSize * Math.sin(-rad));
 
-        // Rysowanie grotu
         g2d.drawLine(endX, endY, leftX, leftY);
         g2d.drawLine(endX, endY, rightX, rightY);
 
-        // Przywracamy oryginalną transformację (w ten sposób zmiany nie będą dotyczyć innych rysunków)
         g2d.setTransform(originalTransform);
     }
-
 
     private void drawTrafficLight(Graphics g, int centerX, int centerY, boolean horizontal, int state, long currentTime) {
         int rectWidth = 24;
         int rectHeight = 45;
         int radius = 6;
 
-        // Oblicz widoczność migającego żółtego światła
-        boolean blinkOn = (currentTime / 500) % 2 == 0; // Co 500 ms zmienia stan (miganie)
+        boolean blinkOn = (currentTime / 500) % 2 == 0;
 
         if (horizontal) {
             g.setColor(Color.BLACK);
@@ -632,7 +735,6 @@ public class TrafficSimulation extends JPanel {
             int greenX = yellowX + radius * 2 + 2;
             int lightY = centerY - radius;
 
-            // Rysowanie stanu świateł
             if (state == 3) { // Awaria: tylko żółte miga
                 if (blinkOn) {
                     g.setColor(Color.YELLOW);
@@ -657,7 +759,6 @@ public class TrafficSimulation extends JPanel {
             int yellowY = redY + radius * 2 + 2;
             int greenY = yellowY + radius * 2 + 2;
 
-            // Rysowanie stanu świateł
             if (state == 3) { // Awaria: tylko żółte miga
                 if (blinkOn) {
                     g.setColor(Color.YELLOW);
@@ -681,19 +782,15 @@ public class TrafficSimulation extends JPanel {
         int rectHeight = 34;
         int radius = 6;
 
-        // Rysowanie prostokąta sygnalizatora
         g.setColor(Color.BLACK);
         g.fillRect(centerX - rectWidth / 2, centerY - rectHeight / 2, rectWidth, rectHeight);
 
-        // Pozycje świateł
         int lightX = centerX - radius;
         int redY = centerY - rectHeight / 2 + 3;
         int greenY = centerY + rectHeight / 2 - radius * 2 - 3;
 
-        // Oblicz widoczność migającego zielonego światła
         boolean blinkOn = (currentTime / 500) % 2 == 0; // Co 500 ms zmienia stan (miganie)
 
-        // Rysowanie stanu świateł
         if (state == 2) { // Zielone
             g.setColor(Color.GREEN);
             g.fillOval(lightX, greenY, radius * 2, radius * 2);
@@ -708,18 +805,12 @@ public class TrafficSimulation extends JPanel {
         }
     }
 
-
-
-
-
     public static void main(String[] args) {
-        JFrame frame = new JFrame("Traffic Simulation");
+        JFrame frame = new JFrame("Symulacja ruchu drogowego");
         TrafficSimulation simulation = new TrafficSimulation();
         frame.add(simulation);
         frame.pack();
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
     }
-
-
 }
